@@ -1,0 +1,17 @@
+# Environment
+.env
+
+# Virtual env
+.venv*
+venv/
+__pycache__/
+*.pyc
+
+# Mac
+.DS_Store
+
+# Images
+*.png
+
+# Data outputs
+*.csv
