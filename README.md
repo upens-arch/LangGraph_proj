@@ -6,8 +6,8 @@ This repo aims to build different usecases for Langgraph based AI agents.
 ## Description
 
 This repo shows different examples of AI agents
-* Blog Writing Agent (https://github.com/upens-arch/LangGraph_proj/edit/main/README.md#blog-writing-agent)
-  
+* 	[Blog Writing Agent](#Blog-Writing-Agent)
+
 ## Getting Started
 
 ### Setup
