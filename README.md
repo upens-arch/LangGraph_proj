@@ -7,6 +7,7 @@ This repo aims to build different usecases for Langgraph based AI agents.
 
 This repo shows different examples of AI agents
 * 	[Blog Writing Agent](#Blog-Writing-Agent)
+* 	[RAG health policy](#RAG_for_health_insurance_policy)
 
 ## Getting Started
 
@@ -43,4 +44,12 @@ This is an AI blog writer. Outcome of this includes
 Workflow of the graph is
 ```bash
 User Topic -> Domain Agent -> Web Research Agent -> Writer Agent <-> Editor Agent-> Image Prompt Agent -> Image Generation Agent -> Publisher
+```
+### RAG for health insurance policy
+This is a Q&A RAG which answers to user questions based on the knowledge provided (pdfs). If answer cannot be found, replies with "I could not find this in the policy document."
+
+Workflow of the graph is 
+```bash
+PDF -> Chunk -> Embed (Gemini) -> Chroma (Vector DB)
+Query -> Retrieve -> Generate Answer -> Verify Answer
 ```
