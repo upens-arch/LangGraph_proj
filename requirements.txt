@@ -15,6 +15,8 @@ jsonpointer==3.0.0
 langchain==0.3.27
 langchain-core==0.3.83
 langchain-text-splitters==0.3.11
+langchain-community
+langchain-google-genai
 langgraph==0.6.11
 langgraph-checkpoint==2.1.2
 langgraph-prebuilt==0.6.5
@@ -49,4 +51,6 @@ zstandard==0.25.0
 python-dotenv
 google-search-results
 google-generativeai
-langchain-google-genai
+chromadb
+pypdf
+tiktoken
