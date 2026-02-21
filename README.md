@@ -54,7 +54,8 @@ PDF -> Chunk -> Embed (Gemini) -> Chroma (Vector DB)
 Query -> Retrieve -> Generate Answer -> Verify Answer
 ```
 #### Additional features
-- [x] (Enable converstaional chat - Ex. continuation to previous question)
+- [x] (Enable converstaional chat - Ex. follow-up to previous question)
+- [ ] (Token optimisation for long history chats)
 - [ ] (Enable direct text search - Ex. search by clause number)
 #### Enabling conversional chat
 Change1 : Detection of topic change to handle context bleeding (classify)
