@@ -60,6 +60,7 @@ Query -> Retrieve -> Generate Answer -> Verify Answer
 Change1 : Detection of topic change to handle context bleeding (classify)
 - Method1: Using llm
 - Method2: Using cosine similarity of last user question and new question
+
 Change 2 : Question rewriting:
 - Rewrite follow-up into standalone question.
 - This improves the quality of embedding-based retrieval as the standalone question has better information than a follow-up question.
