@@ -54,5 +54,16 @@ PDF -> Chunk -> Embed (Gemini) -> Chroma (Vector DB)
 Query -> Retrieve -> Generate Answer -> Verify Answer
 ```
 #### Additional features
-- [ ] (Enable converstaional chat - Ex. continuation to previous question)
+- [x] (Enable converstaional chat - Ex. continuation to previous question)
 - [ ] (Enable direct text search - Ex. search by clause number)
+#### Enabling conversional chat
+Change1 : Detection of topic change to handle context bleeding (classify)
+- Method1: Using llm
+- Method2: Using cosine similarity of last user question and new question
+Change 2 : Question rewriting:
+- Rewrite follow-up into standalone question.
+- This improves the quality of embedding-based retrieval as the standalone question has better information than a follow-up question.
+- Workflow of the modfied graph is 
+```bash
+PDF -> Chunk -> Embed (Gemini) -> Chroma (Vector DB)
+Query -> classify if follow-up -> Rewrite Question -> Retrieve -> Generate Answer -> Verify Answer
