@@ -53,3 +53,6 @@ Workflow of the graph is
 PDF -> Chunk -> Embed (Gemini) -> Chroma (Vector DB)
 Query -> Retrieve -> Generate Answer -> Verify Answer
 ```
+#### Additional features
+- [ ] (Enable converstaional chat - Ex. continuation to previous question)
+- [ ] (Enable direct text search - Ex. search by clause number)
