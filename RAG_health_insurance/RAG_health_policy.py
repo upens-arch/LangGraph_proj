@@ -95,12 +95,82 @@ def build_vector_store(pdf_paths: List[str]):
 
 class PolicyState(TypedDict):
     question: str
+    chat_history: list
     retrieved_docs: List[Document]
     answer: str
 
 
 # =========================
-# 🔎 RETRIEVER NODE
+# Intent classification NODE
+# =========================
+
+def classify_question_node(state: PolicyState):
+    # check if the new question is a followup or new topic.
+    # this is to handle context bleed across topic shifts
+
+    history_text = ""
+    for turn in state["chat_history"]:
+        history_text += f"{turn['role']}: {turn['content']}\n"
+
+    prompt = f"""
+    You are part of a Q&A RAG based on a database. 
+    All questions would be related to the database.
+    Your job is to check if the current question is a continuation to the previous (history).
+
+    for example, if previous and current queston are related to "waiting period", treat them as relevant.
+    If previous question is about "waiting period" and current question is about "exclusions", dont treat them as relevant though the are from same policy.
+    Conversation so far:
+    {history_text}
+
+    New Question:
+    {state["question"]}
+
+    Is the new question:
+    A) A follow-up to the previous sub-topic
+    B) A new and unrelated sub-topic
+
+    Respond ONLY with A or B.
+    """
+
+    verdict = llm.invoke(prompt).content.strip()
+    print("classify_question_node Verdict: ",verdict)
+
+    if verdict == "B":
+        print("Reset History....")
+        # reset history
+        return {"chat_history": []}
+
+    return {}
+
+# =========================
+# REWRITE QUESTION NODE
+# =========================
+def rewrite_question_node(state):
+
+    history_text = ""
+    for turn in state["chat_history"]:
+        history_text += f"{turn['role']}: {turn['content']}\n"
+
+    prompt = f"""
+    Rewrite the user's latest question into a standalone question.
+    Preserve meaning but remove ambiguity.
+
+    Conversation:
+    {history_text}
+
+    Question:
+    {state['question']}
+    """
+
+    rewritten = llm.invoke(prompt).content
+
+    print("rewritten question: ", rewritten)
+
+    return {"question": rewritten}
+
+
+# =========================
+# RETRIEVER NODE
 # =========================
 
 def retrieve_node(state: PolicyState):
@@ -134,12 +204,20 @@ def generate_answer_node(state: PolicyState):
             ]
         )
 
+    # Format chat history
+    history_text = ""
+    for turn in state["chat_history"]:
+        history_text += f"{turn['role']}: {turn['content']}\n"
 
     prompt = ChatPromptTemplate.from_template("""
     You are an expert health insurance assistant.
 
+    Conversation so far:
+    {chat_history}          
+                                                                             
     Rules:
     - Answer ONLY from provided context.
+    - if chat_history is present, the current question is a followup from previous. So consider it begore answering.                                
     - Cite using format:
     (File: <filename>, Page: <page number>)
     - If not found, say:
@@ -156,6 +234,7 @@ def generate_answer_node(state: PolicyState):
     chain = prompt | llm
 
     response = chain.invoke({
+        "chat_history": history_text,
         "context": context,
         "question": state["question"]
     })
@@ -190,6 +269,17 @@ def verify_node(state: PolicyState):
 
     return {}
 
+# =========================
+#  CLASSIFIER ROUTER
+# =========================
+def classifier_router(state: PolicyState):
+
+    if state["chat_history"]:
+        #return "publish"
+        return "rewrite"
+
+    return "retrieve"
+
 
 # =========================
 #  BUILD GRAPH
@@ -199,12 +289,24 @@ def build_graph():
 
     graph = StateGraph(PolicyState)
 
+    graph.add_node("classify", classify_question_node)
+    graph.add_node("rewrite",rewrite_question_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("generate", generate_answer_node)
     graph.add_node("verify", verify_node)
 
-    graph.set_entry_point("retrieve")
+    graph.set_entry_point("classify")
 
+    graph.add_conditional_edges(
+    "classify",
+    classifier_router,
+    {
+        "rewrite": "rewrite",
+        "retrieve": "retrieve"
+    }
+    )
+
+    graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "generate")
     graph.add_edge("generate", "verify")
     graph.add_edge("verify", END)
@@ -224,12 +326,28 @@ if __name__ == "__main__":
     ]
 
     global vectordb
-    vectordb = build_vector_store(pdf_files)
+    #vectordb = build_vector_store(pdf_files)
+    # check if the db already exists. If exits, load the existing db, else create one
+    if os.path.exists("./policy_db"):
+        print("Loading existing vector DB...")
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/gemini-embedding-001",
+            google_api_key=api_key
+        )
+        vectordb = Chroma(
+            persist_directory="./policy_db",
+            embedding_function=embeddings
+        )
+    else:
+        print("Building new vector DB...")
+        vectordb = build_vector_store(pdf_files)
 
     rag_app = build_graph()
 
-    print("\n🏥 Health Insurance Policy Assistant")
+    print("\n Health Insurance Policy Assistant")
     print("Type 'exit' to quit.\n")
+
+    chat_history = []
 
     while True:
 
@@ -239,9 +357,14 @@ if __name__ == "__main__":
             break
 
         result = rag_app.invoke({
-            "question": user_question
+            "question": user_question,
+            "chat_history": chat_history
         })
 
         print("\n📘 Answer:")
         print(result["answer"])
         print("\n" + "-"*50 + "\n")
+
+        # Update memory
+        chat_history.append({"role": "user", "content": user_question})
+        chat_history.append({"role": "assistant", "content": result["answer"]})
