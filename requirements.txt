@@ -54,3 +54,4 @@ google-generativeai
 chromadb
 pypdf
 tiktoken
+rank-bm25

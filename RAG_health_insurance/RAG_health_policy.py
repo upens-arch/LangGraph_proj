@@ -30,11 +30,15 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 
 from langchain_core.prompts import ChatPromptTemplate
 
+from langchain.retrievers import BM25Retriever,EnsembleRetriever
+
 from dotenv import load_dotenv
 # Load .env file
 load_dotenv()
 # Get the API key
 api_key = os.getenv("GOOGLE_API_KEY")
+
+ENABLE_ENSEMBLE_RETRIEVER = False # set this for embedding + lexical (BM25) search
 
 # =========================
 #  ENV CONFIG
@@ -48,10 +52,9 @@ os.environ["LANGCHAIN_PROJECT"] = "RAG-Health-Insurance"
 
 
 # =========================
-#  BUILD VECTOR STORE
+#  GET DOCUMENT CHUNKS
 # =========================
-
-def build_vector_store(pdf_paths: List[str]):
+def build_doc_chunks(pdf_paths: List[str]):
 
     documents = []
 
@@ -66,8 +69,33 @@ def build_vector_store(pdf_paths: List[str]):
         chunk_size=1000,
         chunk_overlap=200
     )
-
     split_docs = splitter.split_documents(documents)
+    return split_docs
+
+
+# =========================
+#  BUILD VECTOR STORE
+# =========================
+
+def build_vector_store(pdf_paths: List[str]):
+
+    # documents = []
+
+    # for path in pdf_paths:
+    #     loader = PyPDFLoader(path)
+
+    #     docs = loader.load()
+    #     print(f"Loaded {len(docs)} pages from {path}")
+    #     documents.extend(docs)
+
+    # splitter = RecursiveCharacterTextSplitter(
+    #     chunk_size=1000,
+    #     chunk_overlap=200
+    # )
+
+    # split_docs = splitter.split_documents(documents)
+
+    split_docs = build_doc_chunks(pdf_paths)
 
     # list the models in GenAI
     """genai.configure(api_key=api_key)
@@ -98,6 +126,7 @@ class PolicyState(TypedDict):
     chat_history: list
     retrieved_docs: List[Document]
     answer: str
+    original_question: str
 
 
 # =========================
@@ -166,7 +195,10 @@ def rewrite_question_node(state):
 
     print("rewritten question: ", rewritten)
 
-    return {"question": rewritten}
+    return {
+        "original_question": state["question"],
+        "question": rewritten
+        }
 
 
 # =========================
@@ -179,6 +211,23 @@ def retrieve_node(state: PolicyState):
 
     return {"retrieved_docs": docs}
 
+
+# =========================
+# RETRIEVER NODE ENSEMBLE
+# =========================
+
+def retrieve_ensemble_node(state: PolicyState):
+
+
+    # create ensemble retriever 
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[vector_retriever, bm25_retriever],
+        weights=[0.5, 0.5]
+    )
+
+    docs = ensemble_retriever.invoke(state["question"])
+
+    return {"retrieved_docs": docs}
 
 # =========================
 #  GENERATION NODE
@@ -217,7 +266,7 @@ def generate_answer_node(state: PolicyState):
                                                                              
     Rules:
     - Answer ONLY from provided context.
-    - if chat_history is present, the current question is a followup from previous. So consider it begore answering.                                
+    - if chat_history is present, the current question is a followup from previous. So consider it before answering.                                
     - Cite using format:
     (File: <filename>, Page: <page number>)
     - If not found, say:
@@ -274,8 +323,7 @@ def verify_node(state: PolicyState):
 # =========================
 def classifier_router(state: PolicyState):
 
-    if state["chat_history"]:
-        #return "publish"
+    if len(state.get("chat_history", [])) > 0:
         return "rewrite"
 
     return "retrieve"
@@ -292,22 +340,36 @@ def build_graph():
     graph.add_node("classify", classify_question_node)
     graph.add_node("rewrite",rewrite_question_node)
     graph.add_node("retrieve", retrieve_node)
+    graph.add_node("retrieve_ensemble", retrieve_ensemble_node)
     graph.add_node("generate", generate_answer_node)
     graph.add_node("verify", verify_node)
 
     graph.set_entry_point("classify")
 
-    graph.add_conditional_edges(
-    "classify",
-    classifier_router,
-    {
-        "rewrite": "rewrite",
-        "retrieve": "retrieve"
-    }
-    )
+    if ENABLE_ENSEMBLE_RETRIEVER:
+        graph.add_conditional_edges(
+        "classify",
+        classifier_router,
+        {
+            "rewrite": "rewrite",
+            "retrieve": "retrieve_ensemble"
+        }
+        )
 
-    graph.add_edge("rewrite", "retrieve")
-    graph.add_edge("retrieve", "generate")
+        graph.add_edge("rewrite", "retrieve_ensemble")
+        graph.add_edge("retrieve_ensemble", "generate")
+    else:
+        graph.add_conditional_edges(
+        "classify",
+        classifier_router,
+        {
+            "rewrite": "rewrite",
+            "retrieve": "retrieve"
+        }
+        )
+
+        graph.add_edge("rewrite", "retrieve")
+        graph.add_edge("retrieve", "generate")
     graph.add_edge("generate", "verify")
     graph.add_edge("verify", END)
 
@@ -342,6 +404,18 @@ if __name__ == "__main__":
         print("Building new vector DB...")
         vectordb = build_vector_store(pdf_files)
 
+    if ENABLE_ENSEMBLE_RETRIEVER:
+        # build chunks for BM25 search
+        split_docs = build_doc_chunks(pdf_files)
+            # Create BM25 Retriever
+        global bm25_retriever
+        bm25_retriever = BM25Retriever.from_documents(split_docs)
+        bm25_retriever.k = 4
+
+        # Create Vector Retriever
+        global vector_retriever
+        vector_retriever = vectordb.as_retriever(search_kwargs={"k": 4})
+
     rag_app = build_graph()
 
     print("\n Health Insurance Policy Assistant")
@@ -361,7 +435,7 @@ if __name__ == "__main__":
             "chat_history": chat_history
         })
 
-        print("\n📘 Answer:")
+        print("\nAnswer:")
         print(result["answer"])
         print("\n" + "-"*50 + "\n")
 
