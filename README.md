@@ -56,8 +56,10 @@ Query -> Retrieve -> Generate Answer -> Verify Answer
 #### Additional features
 - [x] (Enable converstaional chat - Ex. follow-up to previous question)
 - [ ] (Token optimisation for long history chats)
-- [ ] (Enable direct text search - Ex. search by clause number)
+- [x] (Enable direct text search - Ex. search by clause number)
+      
 #### Enabling conversional chat
+
 Change1 : Detection of topic change to handle context bleeding (classify)
 - Method1: Using llm
 - Method2: Using cosine similarity of last user question and new question
@@ -69,3 +71,10 @@ Change 2 : Question rewriting:
 ```bash
 PDF -> Chunk -> Embed (Gemini) -> Chroma (Vector DB)
 Query -> classify if follow-up -> Rewrite Question -> Retrieve -> Generate Answer -> Verify Answer
+```
+
+#### Enable direct text (lexical) search
+
+The embedding serach is quite good in semantic searching of documents.
+But, this may fail when actual text search - such as clause number, which is common in health policies or legal documents.
+To Handle this a ensembed retriever is designed which can handle bot semantic and lexical search capabilities
